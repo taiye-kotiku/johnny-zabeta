@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Manager};
 
 #[derive(Serialize, Deserialize)]
 pub struct ScreenshotResult {
@@ -9,10 +10,12 @@ pub struct ScreenshotResult {
     pub timestamp_ms: u64,
 }
 
-/// Captures an activity snapshot only when the user has explicitly opted in.
-/// The `enabled` flag is controlled by the user's settings toggle.
+/// Captures the app window as an activity snapshot, only when the user has
+/// explicitly opted in via the settings toggle. Uses Tauri's built-in
+/// WebviewWindow capture — no external system library dependencies beyond
+/// what Tauri already requires.
 #[tauri::command]
-pub async fn capture_screenshot(enabled: bool) -> Result<ScreenshotResult, String> {
+pub async fn capture_screenshot(app: AppHandle, enabled: bool) -> Result<ScreenshotResult, String> {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -28,13 +31,28 @@ pub async fn capture_screenshot(enabled: bool) -> Result<ScreenshotResult, Strin
     }
 
     use base64::{engine::general_purpose, Engine as _};
-    use screenshots::Screen;
+    use image::{codecs::png::PngEncoder, ImageBuffer, ImageEncoder, Rgba};
 
-    let screens = Screen::all().map_err(|e| e.to_string())?;
-    let screen = screens.first().ok_or_else(|| "No screens available".to_string())?;
-    let image = screen.capture().map_err(|e| e.to_string())?;
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Window not found".to_string())?;
 
-    let png_bytes = image.to_png(None).map_err(|e| e.to_string())?;
+    let img = window.capture_image().map_err(|e| e.to_string())?;
+    let (width, height) = (img.width(), img.height());
+
+    let buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, img.rgba().to_vec())
+        .ok_or_else(|| "Failed to build image buffer".to_string())?;
+
+    let mut png_bytes: Vec<u8> = Vec::new();
+    PngEncoder::new(&mut png_bytes)
+        .write_image(
+            buffer.as_raw(),
+            width,
+            height,
+            image::ExtendedColorType::Rgba8,
+        )
+        .map_err(|e| e.to_string())?;
+
     let size = png_bytes.len() as u64;
     let encoded = general_purpose::STANDARD.encode(&png_bytes);
 
