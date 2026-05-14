@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -8,10 +8,11 @@ import {
   fetchActiveSession,
   startSession,
   updateSession,
-  logActivity,
   fetchUserTasks,
   requestPayout,
 } from "@/lib/supabase";
+import { useActivitySync } from "@/hooks/useActivitySync";
+import { syncQueue } from "@/lib/sync";
 import { formatDuration, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Task } from "@/types";
 
@@ -23,8 +24,7 @@ export function Dashboard() {
   const {
     activeSession, sessionElapsedSeconds,
     activityStats, isTracking, screenshotsEnabled,
-    setActiveSession, incrementElapsed, resetElapsed,
-    updateActivityStats, resetActivityStats,
+    setActiveSession, resetElapsed,
     setTracking, setScreenshotsEnabled,
   } = useSessionStore();
   const { tasks, setTasks, updateTask } = useTaskStore();
@@ -32,81 +32,30 @@ export function Dashboard() {
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isRequestingPayout, setIsRequestingPayout] = useState(false);
-  const [packetSeconds, setPacketSeconds] = useState(0);
   const [pulseActive, setPulseActive] = useState(false);
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const packetRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Centralised activity sync hook — handles timers, listeners, packet flush
+  const { packetSeconds, flushNow } = useActivitySync();
+
+  // Flash sync indicator when a packet lands
+  useEffect(() => {
+    if (packetSeconds === 0 && isTracking) {
+      setPulseActive(true);
+      const t = setTimeout(() => setPulseActive(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [packetSeconds, isTracking]);
 
   // Load existing active session and tasks
   useEffect(() => {
     if (!profile) return;
     fetchActiveSession(profile.id).then(({ data }) => {
-      if (data) setActiveSession(data);
+      if (data) { setActiveSession(data); setTracking(true); }
     });
     fetchUserTasks(profile.id).then(({ data }) => {
       if (data) setTasks(data);
     });
-  }, [profile, setActiveSession, setTasks]);
-
-  // Session elapsed timer
-  useEffect(() => {
-    if (!isTracking) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      return;
-    }
-    timerRef.current = setInterval(incrementElapsed, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isTracking, incrementElapsed]);
-
-  // Activity packet flusher — sends a log every 60s
-  const flushPacket = useCallback(async () => {
-    if (!activeSession || !profile) return;
-    await logActivity({
-      session_id: activeSession.id,
-      user_id: profile.id,
-      keystroke_count: activityStats.keystroke_count,
-      mouse_event_count: activityStats.mouse_event_count,
-      window_focus_seconds: activityStats.window_focus_seconds,
-      packet_duration_seconds: ACTIVITY_PACKET_SECONDS,
-    });
-    resetActivityStats();
-    setPacketSeconds(0);
-    setPulseActive(true);
-    setTimeout(() => setPulseActive(false), 1200);
-  }, [activeSession, profile, activityStats, resetActivityStats]);
-
-  useEffect(() => {
-    if (!isTracking) {
-      if (packetRef.current) clearInterval(packetRef.current);
-      setPacketSeconds(0);
-      return;
-    }
-    const interval = setInterval(() => {
-      setPacketSeconds((s) => {
-        if (s + 1 >= ACTIVITY_PACKET_SECONDS) {
-          flushPacket();
-          return 0;
-        }
-        return s + 1;
-      });
-    }, 1000);
-    packetRef.current = interval;
-    return () => clearInterval(interval);
-  }, [isTracking, flushPacket]);
-
-  // Keyboard / mouse counters (transparent to user — visible in UI)
-  useEffect(() => {
-    if (!isTracking) return;
-    const onKey = () => updateActivityStats({ keystroke_count: activityStats.keystroke_count + 1 });
-    const onMouse = () => updateActivityStats({ mouse_event_count: activityStats.mouse_event_count + 1 });
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousemove", onMouse);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousemove", onMouse);
-    };
-  }, [isTracking, activityStats, updateActivityStats]);
+  }, [profile, setActiveSession, setTasks, setTracking]);
 
   const handleStartSession = async () => {
     if (!profile) return;
@@ -124,9 +73,8 @@ export function Dashboard() {
     if (!activeSession) return;
     setIsStopping(true);
     setTracking(false);
-    if (activityStats.keystroke_count > 0 || activityStats.mouse_event_count > 0) {
-      await flushPacket();
-    }
+    flushNow();
+    await syncQueue.flush();
     await updateSession(activeSession.id, {
       status: "completed",
       ended_at: new Date().toISOString(),

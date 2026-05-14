@@ -1,13 +1,21 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import { fetchProfile } from "@/lib/supabase";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import type { ReactNode } from "react";
+
+import { supabase, fetchProfile } from "@/lib/supabase";
 import { useAuthStore } from "@/lib/store";
+
 import { AppShell } from "@/components/layout/AppShell";
 import { Login } from "@/pages/Login";
 import { Onboarding } from "@/pages/Onboarding";
 import { Dashboard } from "@/pages/Dashboard";
+import { Sessions } from "@/pages/Sessions";
+import { Earnings } from "@/pages/Earnings";
+import { Settings } from "@/pages/Settings";
 import { AdminDashboard } from "@/pages/AdminDashboard";
+import { Workers } from "@/pages/admin/Workers";
+import { Payouts } from "@/pages/admin/Payouts";
+import { Analytics } from "@/pages/admin/Analytics";
 
 export default function App() {
   const { profile, isLoading, setProfile, setLoading } = useAuthStore();
@@ -44,41 +52,52 @@ export default function App() {
     );
   }
 
+  const defaultPath = profile
+    ? profile.role === "admin"
+      ? "/admin"
+      : "/dashboard"
+    : "/login";
+
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public */}
         <Route
           path="/login"
-          element={profile ? <Navigate to={profile.role === "admin" ? "/admin" : "/dashboard"} replace /> : <Login />}
+          element={profile ? <Navigate to={defaultPath} replace /> : <Login />}
         />
 
-        {/* Protected routes */}
+        {/* Protected */}
         <Route element={<RequireAuth />}>
+          {/* Onboarding — no shell */}
+          <Route path="/onboarding" element={<Onboarding />} />
+
+          {/* Worker routes — require completed onboarding */}
           <Route element={<RequireOnboarding />}>
             <Route element={<AppShell />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/tasks" element={<Dashboard />} />
-              <Route path="/sessions" element={<Dashboard />} />
-              <Route path="/earnings" element={<Dashboard />} />
-              <Route path="/settings" element={<Dashboard />} />
-              <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
-              <Route path="/admin/*" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
+              <Route path="/sessions" element={<Sessions />} />
+              <Route path="/earnings" element={<Earnings />} />
+              <Route path="/settings" element={<Settings />} />
+
+              {/* Admin routes */}
+              <Route element={<RequireAdmin />}>
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/workers" element={<Workers />} />
+                <Route path="/admin/payouts" element={<Payouts />} />
+                <Route path="/admin/analytics" element={<Analytics />} />
+              </Route>
             </Route>
           </Route>
-
-          <Route path="/onboarding" element={<Onboarding />} />
         </Route>
 
-        <Route path="*" element={<Navigate to={profile ? (profile.role === "admin" ? "/admin" : "/dashboard") : "/login"} replace />} />
+        <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
 
-// ── Route guards ──────────────────────────────────────────────────────────────
-
-import { Outlet } from "react-router-dom";
-import type { ReactNode } from "react";
+// ── Guards ────────────────────────────────────────────────────────────────────
 
 function RequireAuth() {
   const { profile } = useAuthStore();
@@ -95,8 +114,8 @@ function RequireOnboarding() {
   return <Outlet />;
 }
 
-function RequireAdmin({ children }: { children: ReactNode }) {
+function RequireAdmin() {
   const { profile } = useAuthStore();
   if (profile?.role !== "admin") return <Navigate to="/dashboard" replace />;
-  return <>{children}</>;
+  return <Outlet />;
 }
