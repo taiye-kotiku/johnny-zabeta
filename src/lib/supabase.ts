@@ -8,6 +8,11 @@ import type {
   Screenshot,
   Task,
   Payout,
+  Notification,
+  WorkflowEvent,
+  VerificationQueueItem,
+  SessionAnalytics,
+  EdgeFnResult,
 } from "@/types";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -24,11 +29,66 @@ export type Database = {
       screenshots: { Row: Screenshot; Insert: Partial<Screenshot>; Update: Partial<Screenshot> };
       tasks: { Row: Task; Insert: Partial<Task>; Update: Partial<Task> };
       payouts: { Row: Payout; Insert: Partial<Payout>; Update: Partial<Payout> };
+      notifications: { Row: Notification; Insert: Partial<Notification>; Update: Partial<Notification> };
+      workflow_events: { Row: WorkflowEvent; Insert: Partial<WorkflowEvent>; Update: Partial<WorkflowEvent> };
+      verification_queue: { Row: VerificationQueueItem; Insert: Partial<VerificationQueueItem>; Update: Partial<VerificationQueueItem> };
+      session_analytics: { Row: SessionAnalytics; Insert: Partial<SessionAnalytics>; Update: Partial<SessionAnalytics> };
     };
   };
 };
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+
+// ── Edge Functions ─────────────────────────────────────────────────────────────
+
+export async function invokeFn<T = unknown>(
+  fn: string,
+  body: Record<string, unknown>
+): Promise<EdgeFnResult<T>> {
+  try {
+    const { data, error } = await supabase.functions.invoke<T>(fn, { body });
+    if (error) return { data: null, error: error.message };
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+export const verifyOnboarding = (userId: string) =>
+  invokeFn<{ verified: boolean; slides_total: number; slides_completed: number }>(
+    "verify-onboarding",
+    { user_id: userId }
+  );
+
+export const validateSession = (sessionId: string, userId: string) =>
+  invokeFn<{ session_id: string; score: number; status: string; passed: boolean }>(
+    "validate-session",
+    { session_id: sessionId, user_id: userId }
+  );
+
+export const processPayout = (
+  payoutId: string,
+  action: "approve" | "release" | "reject",
+  actorId: string,
+  notes?: string
+) =>
+  invokeFn<{ payout_id: string; new_status: string }>("process-payout", {
+    payout_id: payoutId,
+    action,
+    actor_id: actorId,
+    notes,
+  });
+
+export const runWorkflowEngine = (
+  eventType: string,
+  userId: string,
+  payload?: Record<string, unknown>
+) =>
+  invokeFn<{ rules_executed: string[] }>("workflow-engine", {
+    event_type: eventType,
+    user_id: userId,
+    payload,
+  });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -70,7 +130,11 @@ export const fetchTrainingSlides = async () =>
     .eq("is_active", true)
     .order("slide_order", { ascending: true });
 
-export const markSlideViewed = async (userId: string, slideId: string, durationSeconds: number) =>
+export const markSlideViewed = async (
+  userId: string,
+  slideId: string,
+  durationSeconds: number
+) =>
   supabase
     .from("training_progress")
     .upsert({ user_id: userId, slide_id: slideId, duration_viewed_seconds: durationSeconds })
@@ -130,7 +194,10 @@ export const fetchUserTasks = async (userId: string) =>
     .order("created_at", { ascending: false });
 
 export const fetchAllTasks = async () =>
-  supabase.from("tasks").select("*").order("created_at", { ascending: false });
+  supabase
+    .from("tasks")
+    .select("*, profiles!tasks_assigned_to_fkey(full_name, email)")
+    .order("created_at", { ascending: false });
 
 export const updateTaskStatus = async (taskId: string, status: string) =>
   supabase.from("tasks").update({ status }).eq("id", taskId).select().single();
@@ -178,3 +245,48 @@ export const updatePayoutStatus = async (
     .eq("id", payoutId)
     .select()
     .single();
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export const fetchUserNotifications = async (userId: string, limit = 20) =>
+  supabase
+    .from("notifications")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+export const markNotificationRead = async (notificationId: string) =>
+  supabase.from("notifications").update({ is_read: true }).eq("id", notificationId);
+
+export const markAllNotificationsRead = async (userId: string) =>
+  supabase
+    .from("notifications")
+    .update({ is_read: true })
+    .eq("user_id", userId)
+    .eq("is_read", false);
+
+// ── Workflow Events ───────────────────────────────────────────────────────────
+
+export const fetchRecentEvents = async (limit = 50) =>
+  supabase
+    .from("workflow_events")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+export const fetchUserEvents = async (userId: string, limit = 20) =>
+  supabase
+    .from("workflow_events")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+// ── Verification Queue ────────────────────────────────────────────────────────
+
+export const fetchVerificationQueue = async () =>
+  supabase
+    .from("verification_queue")
+    .select("*, profiles(full_name, email)")
+    .order("created_at", { ascending: false });

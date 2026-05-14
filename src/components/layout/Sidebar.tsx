@@ -15,6 +15,7 @@ interface NavItem {
 const workerNav: NavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: GridIcon, end: true },
   { label: "Sessions", to: "/sessions", icon: ActivityIcon },
+  { label: "Tasks", to: "/tasks", icon: CheckSquareIcon },
   { label: "Earnings", to: "/earnings", icon: WalletIcon },
   { label: "Settings", to: "/settings", icon: SettingsIcon },
 ];
@@ -22,6 +23,7 @@ const workerNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { label: "Overview", to: "/admin", icon: GridIcon, end: true },
   { label: "Workers", to: "/admin/workers", icon: UsersIcon },
+  { label: "Tasks", to: "/admin/tasks", icon: CheckSquareIcon },
   { label: "Payouts", to: "/admin/payouts", icon: WalletIcon },
   { label: "Analytics", to: "/admin/analytics", icon: BarChartIcon },
 ];
@@ -174,6 +176,15 @@ function BarChartIcon({ className }: { className?: string }) {
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
       <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+
+function CheckSquareIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <polyline points="9 11 12 14 22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </svg>
   );
 }

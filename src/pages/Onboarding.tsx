@@ -8,6 +8,8 @@ import {
   fetchUserTrainingProgress,
   markSlideViewed,
   updateProfile,
+  verifyOnboarding,
+  runWorkflowEngine,
 } from "@/lib/supabase";
 import type { TrainingSlide } from "@/types";
 
@@ -78,15 +80,29 @@ export function Onboarding() {
     if (!profile || !currentSlide || lockRemaining > 0) return;
     setIsCompleting(true);
 
+    // Record final slide view
     const duration = Math.round((Date.now() - slideStartTime) / 1000);
     await markSlideViewed(profile.id, currentSlide.id, duration);
 
-    const updatedProfile = await updateProfile(profile.id, {
-      onboarding_status: "completed",
-      onboarding_completed_at: new Date().toISOString(),
-    });
+    // Authoritative verification via edge function — updates profile + emits event + sends notification
+    const { data: verifyResult } = await verifyOnboarding(profile.id);
 
-    if (updatedProfile.data) setProfile(updatedProfile.data);
+    if (verifyResult?.verified) {
+      // Fetch refreshed profile so local state reflects completion
+      const { data: refreshed } = await updateProfile(profile.id, {});
+      if (refreshed) setProfile(refreshed);
+
+      // Trigger workflow engine for any onboarding_completed rules
+      await runWorkflowEngine("onboarding_completed", profile.id);
+    } else {
+      // Edge fn failed or slides incomplete — fall back to client-side update
+      const { data: updatedProfile } = await updateProfile(profile.id, {
+        onboarding_status: "completed",
+        onboarding_completed_at: new Date().toISOString(),
+      });
+      if (updatedProfile) setProfile(updatedProfile);
+    }
+
     navigate("/dashboard");
   };
 

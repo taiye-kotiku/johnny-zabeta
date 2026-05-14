@@ -12,10 +12,12 @@ import { Dashboard } from "@/pages/Dashboard";
 import { Sessions } from "@/pages/Sessions";
 import { Earnings } from "@/pages/Earnings";
 import { Settings } from "@/pages/Settings";
+import { Tasks } from "@/pages/Tasks";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { Workers } from "@/pages/admin/Workers";
 import { Payouts } from "@/pages/admin/Payouts";
 import { Analytics } from "@/pages/admin/Analytics";
+import { AdminTasks } from "@/pages/admin/Tasks";
 
 export default function App() {
   const { profile, isLoading, setProfile, setLoading } = useAuthStore();
@@ -77,6 +79,7 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/sessions" element={<Sessions />} />
+              <Route path="/tasks" element={<Tasks />} />
               <Route path="/earnings" element={<Earnings />} />
               <Route path="/settings" element={<Settings />} />
 
@@ -84,6 +87,7 @@ export default function App() {
               <Route element={<RequireAdmin />}>
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/workers" element={<Workers />} />
+                <Route path="/admin/tasks" element={<AdminTasks />} />
                 <Route path="/admin/payouts" element={<Payouts />} />
                 <Route path="/admin/analytics" element={<Analytics />} />
               </Route>

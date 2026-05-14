@@ -10,6 +10,8 @@ import {
   updateSession,
   fetchUserTasks,
   requestPayout,
+  validateSession,
+  runWorkflowEngine,
 } from "@/lib/supabase";
 import { useActivitySync } from "@/hooks/useActivitySync";
 import { syncQueue } from "@/lib/sync";
@@ -33,6 +35,7 @@ export function Dashboard() {
   const [isStopping, setIsStopping] = useState(false);
   const [isRequestingPayout, setIsRequestingPayout] = useState(false);
   const [pulseActive, setPulseActive] = useState(false);
+  const [sessionToast, setSessionToast] = useState<{ type: "success" | "pending"; msg: string } | null>(null);
 
   // Centralised activity sync hook — handles timers, listeners, packet flush
   const { packetSeconds, flushNow } = useActivitySync();
@@ -70,19 +73,42 @@ export function Dashboard() {
   };
 
   const handleStopSession = async () => {
-    if (!activeSession) return;
+    if (!activeSession || !profile) return;
     setIsStopping(true);
     setTracking(false);
+
+    // Flush any remaining activity packet before closing
     flushNow();
     await syncQueue.flush();
-    await updateSession(activeSession.id, {
+
+    const sessionId = activeSession.id;
+
+    await updateSession(sessionId, {
       status: "completed",
       ended_at: new Date().toISOString(),
       duration_seconds: sessionElapsedSeconds,
     });
+
     setActiveSession(null);
     resetElapsed();
     setIsStopping(false);
+
+    // Fire-and-forget: validate session and run workflow engine
+    setSessionToast({ type: "pending", msg: "Verifying session…" });
+    validateSession(sessionId, profile.id).then(({ data, error }) => {
+      if (error || !data) {
+        setSessionToast({ type: "pending", msg: "Verification queued." });
+      } else if (data.passed) {
+        setSessionToast({ type: "success", msg: `Session verified (+earnings credited).` });
+        runWorkflowEngine("session_ended", profile.id, {
+          session_id: sessionId,
+          duration_seconds: sessionElapsedSeconds,
+        });
+      } else {
+        setSessionToast({ type: "pending", msg: `Session flagged for manual review (score: ${data.score}).` });
+      }
+      setTimeout(() => setSessionToast(null), 5000);
+    });
   };
 
   const handleTaskAction = async (task: Task) => {
@@ -106,6 +132,19 @@ export function Dashboard() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {/* Session verification toast */}
+      {sessionToast && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-sans animate-fade_in ${
+          sessionToast.type === "success"
+            ? "bg-lime/10 border-lime/30 text-lime"
+            : "bg-lavender/10 border-lavender/30 text-lavender"
+        }`}>
+          <span className={`w-2 h-2 rounded-full shrink-0 ${sessionToast.type === "success" ? "bg-lime" : "bg-lavender animate-pulse"}`} />
+          {sessionToast.msg}
+          <button onClick={() => setSessionToast(null)} className="ml-auto opacity-50 hover:opacity-100">✕</button>
+        </div>
+      )}
+
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
