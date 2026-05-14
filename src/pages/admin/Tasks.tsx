@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { useToast } from "@/components/ui/Toast";
 import { useAuthStore } from "@/lib/store";
 import {
   fetchAllTasks,
@@ -43,6 +44,7 @@ const EMPTY_FORM = {
 
 export function AdminTasks() {
   const { profile } = useAuthStore();
+  const { toast } = useToast();
   const [tasks, setTasks] = useState<TaskWithProfile[]>([]);
   const [workers, setWorkers] = useState<Profile[]>([]);
   const [filter, setFilter] = useState<FilterTab>("all");
@@ -106,7 +108,11 @@ export function AdminTasks() {
       deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
       status: "open",
     });
-    if (data) setTasks((prev) => [data as TaskWithProfile, ...prev]);
+    if (data) {
+      setTasks((prev) => [data as TaskWithProfile, ...prev]);
+    } else {
+      toast("Failed to create task.", "error");
+    }
     setForm(EMPTY_FORM);
     setShowCreate(false);
     setIsCreating(false);
@@ -115,18 +121,26 @@ export function AdminTasks() {
   const handleApprove = async (task: TaskWithProfile) => {
     if (isActing) return;
     setIsActing(true);
-    await updateTaskStatus(task.id, "approved");
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: "approved" as const } : t)));
-    setSelectedTask((prev) => (prev?.id === task.id ? { ...prev, status: "approved" as const } : prev));
+    try {
+      await updateTaskStatus(task.id, "approved");
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: "approved" as const } : t)));
+      setSelectedTask((prev) => (prev?.id === task.id ? { ...prev, status: "approved" as const } : prev));
+    } catch {
+      toast("Failed to update task.", "error");
+    }
     setIsActing(false);
   };
 
   const handleReject = async (task: TaskWithProfile) => {
     if (isActing) return;
     setIsActing(true);
-    await updateTaskStatus(task.id, "rejected");
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: "rejected" as const } : t)));
-    setSelectedTask((prev) => (prev?.id === task.id ? { ...prev, status: "rejected" as const } : prev));
+    try {
+      await updateTaskStatus(task.id, "rejected");
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: "rejected" as const } : t)));
+      setSelectedTask((prev) => (prev?.id === task.id ? { ...prev, status: "rejected" as const } : prev));
+    } catch {
+      toast("Failed to update task.", "error");
+    }
     setIsActing(false);
   };
 

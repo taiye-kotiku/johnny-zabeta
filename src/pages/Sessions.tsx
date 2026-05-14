@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Progress } from "@/components/ui/Progress";
 import { useAuthStore } from "@/lib/store";
 import { fetchUserSessions, fetchSessionActivity, supabase } from "@/lib/supabase";
@@ -62,8 +63,9 @@ export function Sessions() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-coral border-t-transparent rounded-full animate-spin" />
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <div className="h-8 w-48 bg-bg-elevated rounded-lg animate-pulse" />
+        <SkeletonTable rows={5} />
       </div>
     );
   }

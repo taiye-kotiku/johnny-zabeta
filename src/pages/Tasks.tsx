@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
 import { useAuthStore, useTaskStore } from "@/lib/store";
 import { fetchUserTasks, updateTaskStatus } from "@/lib/supabase";
 import { useRealtime } from "@/hooks/useRealtime";
@@ -31,6 +33,8 @@ type FilterTab = Task["status"] | "all";
 export function Tasks() {
   const { profile } = useAuthStore();
   const { tasks, setTasks, updateTask } = useTaskStore();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isActing, setIsActing] = useState(false);
@@ -39,6 +43,7 @@ export function Tasks() {
     if (!profile) return;
     fetchUserTasks(profile.id).then(({ data }) => {
       if (data) setTasks(data);
+      setIsLoading(false);
     });
   }, [profile, setTasks]);
 
@@ -76,8 +81,14 @@ export function Tasks() {
         status: nextStatus,
         ...(nextStatus === "submitted" ? { submitted_at: new Date().toISOString() } : {}),
       });
-      await updateTaskStatus(task.id, nextStatus);
-      setSelectedTask((prev) => (prev?.id === task.id ? { ...prev, status: nextStatus! } : prev));
+      try {
+        await updateTaskStatus(task.id, nextStatus);
+        setSelectedTask((prev) => (prev?.id === task.id ? { ...prev, status: nextStatus! } : prev));
+      } catch {
+        toast("Failed to update task. Please try again.", "error");
+        // revert optimistic update
+        updateTask(task.id, { status: task.status });
+      }
     }
     setIsActing(false);
   };
@@ -85,6 +96,15 @@ export function Tasks() {
   const totalEarned = tasks
     .filter((t) => t.status === "approved")
     .reduce((sum, t) => sum + t.reward_amount, 0);
+
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <div className="h-8 w-48 bg-bg-elevated rounded-lg animate-pulse" />
+        <SkeletonTable rows={4} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">

@@ -3,6 +3,8 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Progress } from "@/components/ui/Progress";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
 import { useAuthStore } from "@/lib/store";
 import { fetchUserPayouts, requestPayout, supabase } from "@/lib/supabase";
 import { useRealtime } from "@/hooks/useRealtime";
@@ -14,8 +16,10 @@ const MIN_PAYOUT = 10;
 
 export function Earnings() {
   const { profile } = useAuthStore();
+  const { toast } = useToast();
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [earningsHistory, setEarningsHistory] = useState<{ date: string; earned: number }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestError, setRequestError] = useState("");
 
@@ -23,6 +27,7 @@ export function Earnings() {
     if (!profile) return;
     fetchUserPayouts(profile.id).then(({ data }) => {
       if (data) setPayouts(data);
+      setIsLoading(false);
     });
 
     // Load 30-day earnings from sessions
@@ -76,12 +81,24 @@ export function Earnings() {
     const { error } = await requestPayout(profile.id, profile.pending_balance);
     if (error) {
       setRequestError(error.message);
+      toast("Failed to submit payout request.", "error");
     } else {
       const { data } = await fetchUserPayouts(profile.id);
       if (data) setPayouts(data);
+      toast("Payout request submitted.", "success");
     }
     setIsRequesting(false);
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <div className="h-8 w-48 bg-bg-elevated rounded-lg animate-pulse" />
+        <SkeletonCard rows={4} />
+        <SkeletonCard rows={3} />
+      </div>
+    );
+  }
 
   const totalReleased = payouts.filter((p) => p.status === "released").reduce((s, p) => s + p.amount, 0);
   const pendingPayoutAmount = payouts.filter((p) => p.status === "pending" || p.status === "approved").reduce((s, p) => s + p.amount, 0);

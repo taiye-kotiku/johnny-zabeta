@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
+import { useToast } from "@/components/ui/Toast";
 import { useAuthStore, useSessionStore } from "@/lib/store";
 import { updateProfile, signOut } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
@@ -11,6 +12,7 @@ import { formatCurrency } from "@/lib/utils";
 export function Settings() {
   const { profile, setProfile } = useAuthStore();
   const { screenshotsEnabled, setScreenshotsEnabled } = useSessionStore();
+  const { toast } = useToast();
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -23,6 +25,9 @@ export function Settings() {
       setProfile(data);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      toast("Profile updated.", "success");
+    } else {
+      toast("Failed to save changes.", "error");
     }
     setIsSaving(false);
   };

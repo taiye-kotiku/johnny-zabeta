@@ -5,6 +5,20 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-open"
-  ]
+    "shell:allow-open",
+    "core:app:allow-app-show",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-close"
+  ],
+  "commands": {
+    "allow": [
+      "start_monitoring",
+      "stop_monitoring",
+      "get_session_stats",
+      "record_keystroke",
+      "record_mouse_event",
+      "drain_activity_packet"
+    ]
+  }
 }
