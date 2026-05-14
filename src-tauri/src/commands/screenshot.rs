@@ -10,8 +10,7 @@ pub struct ScreenshotResult {
 }
 
 /// Captures an activity snapshot only when the user has explicitly opted in.
-/// The `enabled` flag is controlled by the user's settings toggle — if false,
-/// no capture is attempted and the command returns immediately.
+/// The `enabled` flag is controlled by the user's settings toggle.
 #[tauri::command]
 pub async fn capture_screenshot(enabled: bool) -> Result<ScreenshotResult, String> {
     let now_ms = SystemTime::now()
@@ -28,16 +27,21 @@ pub async fn capture_screenshot(enabled: bool) -> Result<ScreenshotResult, Strin
         });
     }
 
-    // Platform-specific capture would be implemented here.
-    // Target: compressed JPEG at ~20KB resolution for bandwidth efficiency.
-    // On Linux: xcb/X11 or pipewire screenshot portal.
-    // On macOS: CGDisplay capture.
-    // On Windows: GDI/DXGI desktop duplication.
-    // The result is base64-encoded and returned to the frontend sync queue.
+    use base64::{engine::general_purpose, Engine as _};
+    use screenshots::Screen;
+
+    let screens = Screen::all().map_err(|e| e.to_string())?;
+    let screen = screens.first().ok_or_else(|| "No screens available".to_string())?;
+    let image = screen.capture().map_err(|e| e.to_string())?;
+
+    let png_bytes = image.to_png(None).map_err(|e| e.to_string())?;
+    let size = png_bytes.len() as u64;
+    let encoded = general_purpose::STANDARD.encode(&png_bytes);
+
     Ok(ScreenshotResult {
-        success: false,
-        data_base64: None,
-        size_bytes: None,
+        success: true,
+        data_base64: Some(format!("data:image/png;base64,{}", encoded)),
+        size_bytes: Some(size),
         timestamp_ms: now_ms,
     })
 }

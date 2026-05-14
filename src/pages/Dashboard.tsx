@@ -13,9 +13,12 @@ import {
   validateSession,
   runWorkflowEngine,
 } from "@/lib/supabase";
+import { invoke } from "@tauri-apps/api/core";
 import { useActivitySync } from "@/hooks/useActivitySync";
 import { syncQueue } from "@/lib/sync";
 import { formatDuration, formatCurrency, formatRelativeTime } from "@/lib/utils";
+
+const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
 import type { Task } from "@/types";
 
 const ACTIVITY_PACKET_SECONDS = 60;
@@ -68,6 +71,7 @@ export function Dashboard() {
       setActiveSession(data);
       resetElapsed();
       setTracking(true);
+      if (isTauri) invoke("start_monitoring", { sessionId: data.id }).catch(() => {});
     }
     setIsStarting(false);
   };
@@ -76,6 +80,7 @@ export function Dashboard() {
     if (!activeSession || !profile) return;
     setIsStopping(true);
     setTracking(false);
+    if (isTauri) invoke("stop_monitoring").catch(() => {});
 
     // Flush any remaining activity packet before closing
     flushNow();

@@ -18,7 +18,11 @@
       "get_session_stats",
       "record_keystroke",
       "record_mouse_event",
-      "drain_activity_packet"
+      "drain_activity_packet",
+      "capture_screenshot",
+      "get_activity_snapshot",
+      "get_timestamp_ms",
+      "get_system_info"
     ]
   }
 }
